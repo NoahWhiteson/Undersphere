@@ -133,6 +133,7 @@ const HEALTH_PER_KILL = 15
 const LOCAL_KILL_REWARD_DEDUPE_MS = 2500
 const recentLocalKillRewards = new Map<string, number>()
 const recentLocalBotScoreRewards = new Map<string, number>()
+const recentKillFeedEntries = new Set<string>()
 
 function awardKillCoins() {
   setCoins(getCoins() + COINS_PER_KILL)
@@ -1115,15 +1116,25 @@ void Promise.all([
     killerKills,
     killerBotKills
   ) => {
-    if (targetId.startsWith('bot_')) {
+    const isBot = targetId.startsWith('bot_')
+    const isMeAttacker = attackerId != null && attackerId === multiplayer.getLocalPlayerId()
+    const isMeVictim = targetId === multiplayer.getLocalPlayerId()
+
+    if (isBot) {
       const idx = parseInt(targetId.split('_')[1]!)
       // Ensure bot is marked as killed locally if not already
       targetPlayers.inflictDirectDamage(idx, 999) 
       
-      const botName = victimName || `BOT-${String(idx + 1).padStart(2, '0')}`
-      killFeed.push(botName, weaponLabelFromSlot(slotFromWeaponName(weapon || '')))
+      const killKey = `bot_${idx}_${Math.floor(Date.now() / 2000)}`
+      if (!recentKillFeedEntries.has(killKey)) {
+        recentKillFeedEntries.add(killKey)
+        setTimeout(() => recentKillFeedEntries.delete(killKey), 3000)
+        const botName = victimName || `BOT-${String(idx + 1).padStart(2, '0')}`
+        const weaponLabel = weapon ? weaponLabelFromSlot(slotFromWeaponName(weapon)) : 'Unknown'
+        killFeed.push(botName, weaponLabel)
+      }
       
-      if (attackerId === multiplayer.getLocalPlayerId()) {
+      if (isMeAttacker) {
         grantLocalKillReward(targetId)
         registerLocalBotKillScore(targetId)
         if (typeof killerKills === 'number') myPvpKills = killerKills
@@ -1133,20 +1144,19 @@ void Promise.all([
       return
     }
 
-    if (targetId === multiplayer.getLocalPlayerId()) {
+    if (isMeVictim) {
       isDead = true
       deadKillerId = attackerId ?? null
       player.state.health = 0
 
       if (playerModel.root) {
-        // Use current player velocity for ragdoll if available
         const impulse = player.state.velocity.clone().multiplyScalar(10)
         localPlayerRagdoll = tryCreateSkeletonRagdoll(playerModel.root, playerModel.anims, impulse)
       }
 
       enterDeathUiState()
       deathUI.show(killerName || 'Unknown', weapon || 'Unknown', onDeathScreenConfirmRespawn)
-    } else if (attackerId != null && attackerId === multiplayer.getLocalPlayerId()) {
+    } else if (isMeAttacker) {
       grantLocalKillReward(targetId)
       if (typeof killerKills === 'number') {
         myPvpKills = killerKills
@@ -1156,13 +1166,25 @@ void Promise.all([
       if (typeof killerBotKills === 'number') {
         myBotKills = killerBotKills
       }
-      const victim =
-        victimName ??
-        multiplayer.getPlayerById(targetId)?.username ??
-        'Unknown'
-      killFeed.push(victim, weapon ?? 'Unknown')
+      const killKey = `${targetId}_${Math.floor(Date.now() / 2000)}`
+      if (!recentKillFeedEntries.has(killKey)) {
+        recentKillFeedEntries.add(killKey)
+        setTimeout(() => recentKillFeedEntries.delete(killKey), 3000)
+        const victim = victimName ?? multiplayer.getPlayerById(targetId)?.username ?? 'Unknown'
+        const weaponLabel = weapon ? (weapon.includes('-') ? weapon : weaponLabelFromSlot(slotFromWeaponName(weapon))) : 'Unknown'
+        killFeed.push(victim, weaponLabel)
+      }
+    } else {
+      // Witness: someone else killed someone else
+      const killKey = `${targetId}_${Math.floor(Date.now() / 2000)}`
+      if (!recentKillFeedEntries.has(killKey)) {
+        recentKillFeedEntries.add(killKey)
+        setTimeout(() => recentKillFeedEntries.delete(killKey), 3000)
+        const victim = victimName ?? multiplayer.getPlayerById(targetId)?.username ?? 'Unknown'
+        const weaponLabel = weapon ? (weapon.includes('-') ? weapon : weaponLabelFromSlot(slotFromWeaponName(weapon))) : 'Unknown'
+        killFeed.push(victim, weaponLabel)
+      }
     }
-    // MultiplayerSystem already applied killerKills to the remote NetworkPlayer; refresh for victims and witnesses too.
     updateLeaderboard()
   }
 
@@ -1390,7 +1412,10 @@ const grenadeSystem = new GrenadeSystem(core.scene, sphereRadius, (params) => {
           registerLocalBotKillScore(victimKey)
           // stats will be synced via player_killed message from server
           updateLeaderboard()
-          if (!multiplayer.isConnected()) {
+          const killKey = `${victimKey}_${Math.floor(Date.now() / 2000)}`
+          if (!recentKillFeedEntries.has(killKey)) {
+            recentKillFeedEntries.add(killKey)
+            setTimeout(() => recentKillFeedEntries.delete(killKey), 3000)
             killFeed.push(res.name, 'Grenade')
           }
         }
@@ -2587,7 +2612,10 @@ function shoot() {
             registerLocalBotKillScore(victimKey)
             // stats will be synced via player_killed message from server
             updateLeaderboard()
-            if (!multiplayer.isConnected()) {
+            const killKey = `${victimKey}_${Math.floor(Date.now() / 2000)}`
+            if (!recentKillFeedEntries.has(killKey)) {
+              recentKillFeedEntries.add(killKey)
+              setTimeout(() => recentKillFeedEntries.delete(killKey), 3000)
               killFeed.push(damageRes.name, weaponLabelFromSlot(slot))
             }
           }
