@@ -978,7 +978,8 @@ export class GameRoom extends DurableObject<Env> {
 			nextHealth = Math.max(0, prevHealth - dmg);
 			bot.health = nextHealth;
 			maxHealth = bot.maxHealth;
-			username = targetId.toUpperCase().replace("_", "-");
+			const botIdx = parseInt(targetId.split("_")[1] || "0");
+			username = `BOT-${String(botIdx + 1).padStart(2, '0')}`;
 			// If bot was killed, we'll respawn it in a bit (client usually handles, but we track health)
 			if (nextHealth <= 0 && prevHealth > 0) {
 				bot.lastRespawnAt = now;

@@ -1390,7 +1390,9 @@ const grenadeSystem = new GrenadeSystem(core.scene, sphereRadius, (params) => {
           registerLocalBotKillScore(victimKey)
           // stats will be synced via player_killed message from server
           updateLeaderboard()
-          killFeed.push(res.name, 'Grenade')
+          if (!multiplayer.isConnected()) {
+            killFeed.push(res.name, 'Grenade')
+          }
         }
 
         if (multiplayer.isConnected()) {
@@ -2585,7 +2587,9 @@ function shoot() {
             registerLocalBotKillScore(victimKey)
             // stats will be synced via player_killed message from server
             updateLeaderboard()
-            killFeed.push(damageRes.name, weaponLabelFromSlot(slot))
+            if (!multiplayer.isConnected()) {
+              killFeed.push(damageRes.name, weaponLabelFromSlot(slot))
+            }
           }
           if (multiplayer.isConnected()) {
             multiplayer.sendDamage(`bot_${damageRes.targetIdx}`, cfg.damage, weaponLabelFromSlot(slot), _shotDir)
